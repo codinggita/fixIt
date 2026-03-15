@@ -9,31 +9,60 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import Navbar from '../../components/shared/Navbar';
 import Sidebar from '../../components/shared/Sidebar';
+import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 5;
 
   useEffect(() => {
-    // TODO: Replace with actual API call to backend
-    setLoading(true);
-    setTimeout(() => {
-      // Mock data
-      const mockData = [
-        { id: '1', title: 'Leaking tap in bathroom', category: 'Plumbing', status: 'Pending', date: '2023-10-25' },
-        { id: '2', title: 'Fan regulator not working', category: 'Electrical', status: 'In Progress', date: '2023-10-24' },
-        { id: '3', title: 'Broken chair', category: 'Furniture', status: 'Resolved', date: '2023-10-20' },
-        { id: '4', title: 'Window latch broken', category: 'Furniture', status: 'Pending', date: '2023-10-26' },
-        { id: '5', title: 'Wi-Fi router dead', category: 'Electrical', status: 'Resolved', date: '2023-10-15' },
-        { id: '6', title: 'Water heater issue', category: 'Plumbing', status: 'Pending', date: '2023-10-27' },
-      ];
-      setComplaints(mockData);
-      setLoading(false);
-    }, 800);
-  }, []);
+    const fetchComplaints = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/my?page=${page}&limit=${itemsPerPage}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Session expired. Please login again.');
+            // We should use AuthContext logout here ideally, or just let ProtectedRoute handle it.
+            // But since we can't easily access it without useAuth, we can just clear token and reload/redirect.
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+            return;
+          }
+          throw new Error(result.message || 'Failed to fetch complaints');
+        }
+        
+        // Format dates to match UI expectation if needed
+        const formattedComplaints = result.data.complaints.map(c => ({
+          ...c,
+          id: c._id,
+          date: new Date(c.createdAt).toLocaleDateString()
+        }));
+        
+        setComplaints(formattedComplaints);
+        setTotalPages(result.data.totalPages || 1);
+      } catch (err) {
+        toast.error(err.message || 'Error occurred while fetching complaints');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchComplaints();
+  }, [page]);
 
   const stats = {
     total: complaints.length,
@@ -42,8 +71,7 @@ const Dashboard = () => {
     resolved: complaints.filter(c => c.status === 'Resolved').length
   };
 
-  const totalPages = Math.ceil(complaints.length / itemsPerPage);
-  const paginatedComplaints = complaints.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const paginatedComplaints = complaints;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors">

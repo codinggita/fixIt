@@ -8,6 +8,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Navbar from '../../components/shared/Navbar';
 import Sidebar from '../../components/shared/Sidebar';
 import { useDebounce } from '../../hooks/useDebounce';
+import { toast } from 'react-hot-toast';
 
 const AdminComplaints = () => {
   const [complaints, setComplaints] = useState([]);
@@ -24,82 +25,105 @@ const AdminComplaints = () => {
     block: 'All'
   });
 
-  const fetchComplaints = (search, filterParams) => {
+  const itemsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1);
+
+  const fetchComplaints = async (search, filterParams, currentPage = 1) => {
     setIsSearching(true);
-    // TODO: Replace with actual API call to backend utilizing query params
-    setTimeout(() => {
-      // Extended Mock data for admin table
-      const mockData = Array.from({ length: 45 }).map((_, i) => {
-        const statuses = ['Pending', 'In Progress', 'Resolved'];
-        const categories = ['Plumbing', 'Electrical', 'Furniture', 'Cleaning', 'Other'];
-        const blocks = ['Block A', 'Block B', 'Block C'];
-        
-        return {
-          id: `${i + 1}`,
-          title: `Maintenance Request #${i + 1}`,
-          studentName: `Student ${i + 1}`,
-          room: `A-${100 + i}`,
-          block: blocks[i % 3],
-          category: categories[i % 5],
-          status: statuses[i % 3],
-          date: `2023-10-${(i % 30 + 1).toString().padStart(2, '0')}`
-        };
+    try {
+      const token = localStorage.getItem('token');
+      
+      const queryParams = new URLSearchParams({
+        page: currentPage,
+        limit: itemsPerPage
       });
-
-      // Simple mock filtering
-      let filtered = mockData;
-      if (search) {
-        filtered = filtered.filter(item => 
-          item.title.toLowerCase().includes(search.toLowerCase()) || 
-          item.studentName.toLowerCase().includes(search.toLowerCase()) ||
-          item.room.toLowerCase().includes(search.toLowerCase())
-        );
+      
+      if (search) queryParams.append('title', search);
+      if (filterParams.status !== 'All') queryParams.append('status', filterParams.status);
+      if (filterParams.category !== 'All') queryParams.append('category', filterParams.category);
+      if (filterParams.block !== 'All') queryParams.append('hostelBlock', filterParams.block);
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/all?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to fetch complaints');
       }
-      if (filterParams.status !== 'All') filtered = filtered.filter(i => i.status === filterParams.status);
-      if (filterParams.category !== 'All') filtered = filtered.filter(i => i.category === filterParams.category);
-      if (filterParams.block !== 'All') filtered = filtered.filter(i => i.block === filterParams.block);
-
-      setComplaints(filtered);
+      
+      const formatted = result.data.complaints.map(c => ({
+        id: c._id,
+        title: c.title,
+        studentName: c.studentId.name,
+        room: c.roomNumber,
+        block: c.hostelBlock,
+        category: c.category,
+        status: c.status,
+        date: new Date(c.createdAt).toLocaleDateString()
+      }));
+      
+      setComplaints(formatted);
+      setTotalPages(result.data.totalPages || 1);
+    } catch (err) {
+      toast.error(err.message || 'Error occurred while searching');
+    } finally {
       setIsSearching(false);
       setLoading(false);
-    }, 600);
+    }
   };
 
-  // Run fetch initially and when component mounts
   useEffect(() => {
-    fetchComplaints('', filters);
+    fetchComplaints(searchTerm, filters, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only the first mount
+  }, [page]); // Re-fetch on page change
 
   // Custom debounced search with 400ms delay. 
   // We use useDebounce from the custom hook we built for the debouncing.
-  const handleSearchAPI = useDebounce((currentSearch, currentFilters) => {
-    fetchComplaints(currentSearch, currentFilters);
+  const handleSearchAPI = useDebounce((currentSearch, currentFilters, p) => {
+    fetchComplaints(currentSearch, currentFilters, p);
   }, 400);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
     setPage(1);
-    handleSearchAPI(value, filters);
+    handleSearchAPI(value, filters, 1);
   };
 
   const handleFilterChange = (e) => {
     const newFilters = { ...filters, [e.target.name]: e.target.value };
     setFilters(newFilters);
     setPage(1);
-    fetchComplaints(searchTerm, newFilters);
+    fetchComplaints(searchTerm, newFilters, 1);
   };
 
-  const handleStatusUpdate = (id, newStatus) => {
-    // TODO: Call API to update status specifically
-    // Optimistic UI update
-    setComplaints(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+  const handleStatusUpdate = async (id, newStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Failed to update status');
+
+      toast.success('Status updated');
+      setComplaints(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+    } catch (err) {
+      toast.error(err.message || 'Failed to update status');
+    }
   };
 
-  const itemsPerPage = 10;
-  const totalPages = Math.ceil(complaints.length / itemsPerPage);
-  const paginatedComplaints = complaints.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const paginatedComplaints = complaints;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors">

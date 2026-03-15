@@ -7,35 +7,63 @@ import CategoryBadge from '../../components/ui/CategoryBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Navbar from '../../components/shared/Navbar';
 import Sidebar from '../../components/shared/Sidebar';
+import { toast } from 'react-hot-toast';
 
 const AdminDashboard = () => {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    // TODO: Replace with actual API call to backend
-    setLoading(true);
-    setTimeout(() => {
-      // Mock data
-      const mockData = [
-        { id: '1', title: 'Leaking tap in bathroom', studentName: 'John Doe', room: 'A-101', category: 'Plumbing', status: 'Pending', date: '2023-10-25' },
-        { id: '2', title: 'Fan regulator not working', studentName: 'Jane Smith', room: 'B-205', category: 'Electrical', status: 'In Progress', date: '2023-10-24' },
-        { id: '3', title: 'Broken chair', studentName: 'Alice Johnson', room: 'C-310', category: 'Furniture', status: 'Resolved', date: '2023-10-20' },
-        { id: '4', title: 'Window latch broken', studentName: 'Bob Williams', room: 'A-105', category: 'Furniture', status: 'Pending', date: '2023-10-26' },
-        { id: '5', title: 'Wi-Fi router dead', studentName: 'Charlie Brown', room: 'D-402', category: 'Electrical', status: 'Resolved', date: '2023-10-15' },
-      ];
-      setComplaints(mockData);
-      setLoading(false);
-    }, 800);
-  }, []);
+  const [stats, setStats] = useState({ total: 0, pending: 0, inProgress: 0, resolved: 0 });
 
-  const stats = {
-    total: 124, // Mock total across all rooms
-    pending: 42,
-    inProgress: 18,
-    resolved: 64
-  };
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        
+        // Fetch recent 5 for table
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/all?limit=5`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json();
+        
+        if (!response.ok) throw new Error(result.message || 'Failed to fetch complaints');
+        
+        const formatted = result.data.complaints.map(c => ({
+          id: c._id,
+          title: c.title,
+          studentName: c.studentId.name,
+          room: `${c.hostelBlock} - ${c.roomNumber}`,
+          category: c.category,
+          status: c.status,
+          date: new Date(c.createdAt).toLocaleDateString()
+        }));
+        
+        setComplaints(formatted);
+        
+        // Fetch all for stats (since we don't have a stats endpoint)
+        const statsRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/all?limit=1000`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const statsData = await statsRes.json();
+        if (statsRes.ok) {
+           const allReqs = statsData.data.complaints;
+           setStats({
+             total: statsData.data.totalCount,
+             pending: allReqs.filter(c => c.status === 'Pending').length,
+             inProgress: allReqs.filter(c => c.status === 'In Progress').length,
+             resolved: allReqs.filter(c => c.status === 'Resolved').length
+           });
+        }
+      } catch (err) {
+        toast.error(err.message || 'Error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors">

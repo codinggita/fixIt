@@ -4,6 +4,7 @@ import Navbar from '../../components/shared/Navbar';
 import Sidebar from '../../components/shared/Sidebar';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 const EditComplaint = () => {
   const { id } = useParams();
@@ -21,20 +22,46 @@ const EditComplaint = () => {
   });
 
   useEffect(() => {
-    // TODO: Replace with actual API call to get complaint by id
-    setLoading(true);
-    setTimeout(() => {
-      // Mock data fetching
-      setFormData({
-        title: 'Leaking tap in bathroom',
-        description: 'The sink tap in the attached bathroom has been leaking constantly since yesterday. It is wasting a lot of water and making noise at night.',
-        category: 'Plumbing',
-        roomNumber: 'A-101',
-        block: 'Block A'
-      });
-      setLoading(false);
-    }, 600);
-  }, [id]);
+    const fetchComplaint = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || 'Failed to fetch complaint details');
+        }
+
+        const data = result.data;
+        if (data.status !== 'Pending') {
+          toast.error('Only pending complaints can be edited');
+          navigate(`/complaint/${id}`);
+          return;
+        }
+
+        setFormData({
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          roomNumber: data.roomNumber,
+          block: data.hostelBlock
+        });
+      } catch (err) {
+        toast.error(err.message || 'Error processing request');
+        navigate('/dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchComplaint();
+  }, [id, navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -43,15 +70,38 @@ const EditComplaint = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // TODO: Replace with actual API call to backend
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          category: formData.category
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update complaint');
+      }
+
+      toast.success('Complaint updated successfully');
       navigate(`/complaint/${id}`);
-    }, 800);
+    } catch (err) {
+      toast.error(err.message || 'Failed to update');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

@@ -5,6 +5,7 @@ import Sidebar from '../../components/shared/Sidebar';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { AuthContext } from '../../context/AuthContext';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 const NewComplaint = () => {
   const { user } = useContext(AuthContext);
@@ -27,15 +28,43 @@ const NewComplaint = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // TODO: Replace with actual API call to backend
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          category: formData.category
+        }) // room and block are handled by backend via req.user
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Session expired. Please login again.');
+          navigate('/login');
+          return;
+        }
+        throw new Error(data.message || 'Failed to submit complaint');
+      }
+
+      toast.success('Complaint submitted successfully!');
       navigate('/dashboard');
-    }, 800);
+    } catch (err) {
+      toast.error(err.message || 'An error occurred');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

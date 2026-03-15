@@ -8,6 +8,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import CategoryBadge from '../../components/ui/CategoryBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import ConfirmModal from '../../components/ui/ConfirmModal';
+import { toast } from 'react-hot-toast';
 
 const ComplaintDetail = () => {
   const { id } = useParams();
@@ -19,32 +20,69 @@ const ComplaintDetail = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    // TODO: Replace with actual API call to backend
-    setLoading(true);
-    setTimeout(() => {
-      // Mock data fetching
-      setComplaint({
-        id,
-        title: 'Leaking tap in bathroom',
-        description: 'The sink tap in the attached bathroom has been leaking constantly since yesterday. It is wasting a lot of water and making noise at night.',
-        category: 'Plumbing',
-        status: 'In Progress',
-        roomNumber: 'A-101',
-        block: 'Block A',
-        dateSubmitted: '2023-10-25 14:30'
-      });
-      setLoading(false);
-    }, 600);
-  }, [id]);
+    const fetchComplaint = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-  const handleDelete = () => {
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || 'Failed to fetch complaint details');
+        }
+
+        const data = result.data;
+        setComplaint({
+          id: data._id,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          status: data.status,
+          roomNumber: data.roomNumber,
+          block: data.hostelBlock,
+          dateSubmitted: new Date(data.createdAt).toLocaleString()
+        });
+      } catch (err) {
+        toast.error(err.message || 'Error occurred');
+        navigate('/dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchComplaint();
+  }, [id, navigate]);
+
+  const handleDelete = async () => {
     setIsDeleting(true);
-    // TODO: Replace with actual API call
-    setTimeout(() => {
-      setIsDeleting(false);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to delete complaint');
+      }
+
+      toast.success('Complaint deleted successfully');
       setIsDeleteModalOpen(false);
       navigate('/dashboard');
-    }, 800);
+    } catch (err) {
+      toast.error(err.message || 'Error deleting complaint');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {

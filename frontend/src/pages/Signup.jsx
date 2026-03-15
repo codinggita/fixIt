@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { toast } from 'react-hot-toast';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -58,7 +59,7 @@ const Signup = () => {
     return errorList;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validate();
     setErrors(validationErrors);
@@ -67,13 +68,27 @@ const Signup = () => {
 
     setIsSubmitting(true);
 
-    // TODO: Replace with actual API call to backend
-    // Simulating API call
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // Simulate success and redirect to login
+    // Actual API call to backend
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Something went wrong');
+      }
+
+      toast.success('Registration successful! Please login.');
       navigate('/login');
-    }, 1000);
+    } catch (err) {
+      toast.error(err.message || 'Failed to register');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

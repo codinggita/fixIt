@@ -6,6 +6,7 @@ import Sidebar from '../../components/shared/Sidebar';
 import StatusBadge from '../../components/ui/StatusBadge';
 import CategoryBadge from '../../components/ui/CategoryBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { toast } from 'react-hot-toast';
 
 const AdminComplaintDetail = () => {
   const { id } = useParams();
@@ -16,40 +17,67 @@ const AdminComplaintDetail = () => {
   const [statusUpdating, setStatusUpdating] = useState(false);
 
   useEffect(() => {
-    // TODO: Replace with actual API call to backend
-    setLoading(true);
-    setTimeout(() => {
-      // Mock data
-      setComplaint({
-        id,
-        title: 'Network port is dead',
-        description: 'The ethernet port on the wall near my desk is completely dead. I have tried multiple cables but no lights blink on the switch and I get no connection. I need this fixed for my online classes.',
-        category: 'Networking',
-        status: 'Pending',
-        dateSubmitted: '2023-11-01 09:45',
-        student: {
-          name: 'James Wilson',
-          email: 'james.wilson@uni.edu',
-          phone: '+1 234 567 8900',
-          room: 'B-214',
-          block: 'Block B'
-        },
-        activityLog: [
-          { date: '2023-11-01 09:45', action: 'Complaint Submitted', author: 'James Wilson' }
-        ]
-      });
-      setLoading(false);
-    }, 600);
+    const fetchComplaintDetail = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Failed to fetch details');
+        
+        const data = result.data;
+        
+        setComplaint({
+          id: data._id,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          status: data.status,
+          dateSubmitted: new Date(data.createdAt).toLocaleString(),
+          student: {
+            name: data.studentId.name,
+            email: data.studentId.email,
+            room: data.studentId.roomNumber,
+            block: data.studentId.hostelBlock
+          },
+          activityLog: data.statusHistory.map(h => ({
+             date: new Date(h.changedAt).toLocaleString(),
+             action: `Status marked as ${h.status}`,
+             author: 'System/Admin'
+          })).reverse()
+        });
+      } catch (err) {
+        toast.error(err.message || 'Failed to load details');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchComplaintDetail();
   }, [id]);
 
-  const handleStatusChange = (newStatus) => {
+  const handleStatusChange = async (newStatus) => {
     setStatusUpdating(true);
-    // TODO: Connect this to actual API update patch request
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/complaints/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Failed to update status');
+      
       const newLog = {
-        date: new Date().toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ''),
+        date: new Date().toLocaleString(),
         action: `Status marked as ${newStatus}`,
-        author: 'Warden Admin'
+        author: 'You (Admin)'
       };
 
       setComplaint(prev => ({
@@ -57,8 +85,12 @@ const AdminComplaintDetail = () => {
         status: newStatus,
         activityLog: [newLog, ...prev.activityLog]
       }));
+      toast.success('Status updated successfully');
+    } catch (err) {
+      toast.error(err.message || 'Error updating status');
+    } finally {
       setStatusUpdating(false);
-    }, 600);
+    }
   };
 
   if (loading) {

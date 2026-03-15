@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { ShieldAlert } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { toast } from 'react-hot-toast';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -24,7 +25,7 @@ const Login = () => {
     if (error) setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
@@ -36,25 +37,32 @@ const Login = () => {
       return;
     }
 
-    // TODO: Replace with actual API call to backend
-    // Simulating API call
-    setTimeout(() => {
-      // Mock successful login
-      const mockUser = {
-        id: '1',
-        name: formData.role === 'admin' ? 'Warden Admin' : 'John Doe',
-        email: formData.email,
-        role: formData.role,
-        room: formData.role === 'admin' ? null : 'A-101',
-        block: formData.role === 'admin' ? null : 'Block A'
-      };
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
 
-      login(mockUser);
-      setIsSubmitting(false);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      const { user, token } = data.data;
+
+      login(user, token);
+      toast.success(`Welcome back, ${user.name}!`);
       
       // Redirect based on role
-      navigate(formData.role === 'admin' ? '/admin/dashboard' : '/dashboard');
-    }, 800);
+      navigate(user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+    } catch (err) {
+      setError(err.message || 'Invalid credentials');
+      toast.error(err.message || 'Invalid credentials');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
